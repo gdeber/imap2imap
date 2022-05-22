@@ -142,7 +142,8 @@ class Imap2Imap(threading.Thread):
         self.dest_imap = None
 
         mailbox = src_imap_config.get('mailbox', 'INBOX')
-        message_list = self.get_message_list(self.src_imap, mailbox)
+        sender_of_interest = src_imap_config.get('sender', None)
+        message_list = self.get_message_list(self.src_imap, mailbox, sender_of_interest)
         if message_list is None:
             self.log.error("Failed to get list of message")
             return False
@@ -273,7 +274,7 @@ class Imap2Imap(threading.Thread):
             self.log.exception(imap_exception)
             return None
 
-    def get_message_list(self, imap, mailbox):
+    def get_message_list(self, imap, mailbox, sender_of_interest):
         """
         Get list of message ID in 'mailbox'
 
@@ -293,11 +294,15 @@ class Imap2Imap(threading.Thread):
                 self.log.error("Failed to select '%s': %s", mailbox, data)
                 return None
 
-            typ, data = imap.search(None, 'ALL')
-            if typ == 'OK':
-                self.log.debug("IMAP search on 'ALL' succeeded")
+            #typ, data = imap.search(None, 'ALL')
+            if sender_of_interest != None:
+                typ, data = imap.search(None, '(UNSEEN)', '(FROM "%s")' % (sender_of_interest))
             else:
-                self.log.error("Failed to search on 'ALL': %s", str(data))
+                typ, data = imap.search(None, '(UNSEEN)')              
+            if typ == 'OK':
+                self.log.debug("IMAP search on 'UNSEEN' succeeded")
+            else:
+                self.log.error("Failed to search on 'UNSEEN': %s", str(data))
                 return None
 
             return data[0].split()
