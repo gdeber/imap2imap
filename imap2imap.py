@@ -141,7 +141,7 @@ class Imap2Imap(threading.Thread):
         # Destination IMAP will be open only if there are messages to forward
         self.dest_imap = None
 
-        mailbox = src_imap_config.get('mailbox', 'INBOX')
+        mailbox = src_imap_config.get('mailbox', 'ALL')
         sender_of_interest = src_imap_config.get('sender', None)
         message_list = self.get_message_list(self.src_imap, mailbox, sender_of_interest)
         if message_list is None:
@@ -274,6 +274,18 @@ class Imap2Imap(threading.Thread):
             self.log.exception(imap_exception)
             return None
 
+    def get_mailboxes_list(self, imap):
+        """
+        Get list of mailboxes in imap account
+
+        Parameters:
+        imap: (imaplib.IMAP4) Connection to use
+
+        Return: (list of str) List of mailboxes in imap account
+        """
+
+        return [box.decode().split(' "/" ')[1] for box in imap.list()[1] ]
+
     def get_message_list(self, imap, mailbox, sender_of_interest):
         """
         Get list of message ID in 'mailbox'
@@ -287,25 +299,34 @@ class Imap2Imap(threading.Thread):
         """
 
         try:
-            typ, data = imap.select(mailbox)
-            if typ == 'OK':
-                self.log.debug("IMAP select '%s' succeeded", mailbox)
+            messagelist = list()
+            if mailbox == 'ALL':
+                mailboxes = self.get_mailboxes_list(imap)
             else:
-                self.log.error("Failed to select '%s': %s", mailbox, data)
-                return None
+                mailboxes = ['INBOX']
 
-            #typ, data = imap.search(None, 'ALL')
-            if sender_of_interest != None:
-                typ, data = imap.search(None, '(UNSEEN)', '(FROM "%s")' % (sender_of_interest))
-            else:
-                typ, data = imap.search(None, '(UNSEEN)')              
-            if typ == 'OK':
-                self.log.debug("IMAP search on 'UNSEEN' succeeded")
-            else:
-                self.log.error("Failed to search on 'UNSEEN': %s", str(data))
-                return None
+            for mbox in mailboxes: 
+                typ, data = imap.select(mbox)
+                if typ == 'OK':
+                    self.log.debug("IMAP select '%s' succeeded", mbox)
+                else:
+                    self.log.error("Failed to select '%s': %s", mbox, data)
+                    continue
 
-            return data[0].split()
+                #typ, data = imap.search(None, 'ALL')
+                if sender_of_interest != None:
+                    typ, data = imap.search(None, '(UNSEEN)', '(FROM "%s")' % (sender_of_interest))
+                else:
+                    typ, data = imap.search(None, '(UNSEEN)')              
+                if typ == 'OK':
+                    self.log.debug("IMAP search on 'UNSEEN' succeeded")
+                else:
+                    self.log.error("Failed to search on 'UNSEEN': %s", str(data))
+                    continue
+
+                messagelist += data[0].split()
+            
+            return messagelist
 
         except (imaplib.IMAP4.error, OSError) as imap_exception:
             self.log.exception(imap_exception)
